@@ -1,6 +1,6 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "name": "Spyro",
+  "name": "Spyro AI",
   "theme": "luma",
   "colors": {
     "primary": "#141414",
@@ -8,7 +8,7 @@
   },
   "logo": {
     "light": "https://media.brand.dev/f625a23d-23e8-420d-9098-0c12b8ef77be.svg",
-    "dark": "https://media.brand.dev/f625a23d-23e8-420d-9098-0c12b8ef77be.svg"
+    "dark": "https://mintcdn.com/spyro/85lc-AKHGn8KMyyE/images/spyro-logo-white.png?fit=max&auto=format&n=85lc-AKHGn8KMyyE&q=85&s=bea0077c63d8e0e8c89d9876475ca856"
   },
   "favicon": "https://media.brand.dev/880d9180-6ddb-46bd-9a1e-3fcc10514f0f.png",
   "navbar": {
@@ -20,6 +20,63 @@
   },
   "navigation": {
     "tabs": [
+      {
+        "tab": "Product Documentation",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "product/overview",
+              "product/onboarding",
+              "product/dashboard"
+            ]
+          },
+          {
+            "group": "Audits & SEO",
+            "pages": [
+              "product/audit",
+              "product/understanding-reports",
+              "product/rank-tracker",
+              "product/search-console"
+            ]
+          },
+          {
+            "group": "AI visibility",
+            "pages": [
+              "product/ai-visibility",
+              "product/competitors",
+              "product/competitor-research",
+              "product/prompts",
+              "product/ai-mentions"
+            ]
+          },
+          {
+            "group": "Blog content",
+            "pages": [
+              "product/calendar",
+              "product/writer",
+              "product/spyro-ai-agent",
+              "product/article-settings"
+            ]
+          },
+          {
+            "group": "Account",
+            "pages": [
+              "product/settings",
+              "product/team-members",
+              "product/billing-and-usage"
+            ]
+          },
+          {
+            "group": "More",
+            "pages": [
+              "product/integrations",
+              "product/free-tools",
+              "product/faq"
+            ]
+          }
+        ]
+      },
       {
         "tab": "Developer Docs",
         "groups": [

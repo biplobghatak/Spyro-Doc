@@ -18,78 +18,54 @@ through Dodo, and the source of truth for what each plan can do lives in one fil
 
 ## Plans, prices and limits
 
-There are exactly two self-serve plans — **Pro** and **Agency** — plus a marketing-only
-**Custom** tier (21+ sites, contact sales). The `PlanId` type encodes this
-(`lib/plans.ts:20`):
+There are three self-serve plans — **Starter**, **Pro**, and **Agency** — plus a marketing-only
+**Custom** tier (contact sales). The `PlanId` type encodes this (`lib/plans.ts:28`):
 
 ```ts
-// lib/plans.ts:20
-export type PlanId = "pro" | "agency";
+// lib/plans.ts:28
+export type PlanId = "pro" | "agency" | "starter";
+export type PlanInterval = "month" | "year";
 ```
 
 <Note>
   **There is no "growth" plan you can buy.** `growth` is a *legacy database enum value* only.
   `normalizePlan()` maps any stored `"growth"` (or `null`) to `"pro"` at read time
-  (`lib/plans.ts:227-230`), and `drizzle/0022_dodo_payments.sql:11`
-  (`UPDATE "organizations" SET "plan" = 'pro' WHERE "plan" = 'growth'`) migrated the old rows.
-  The DB enum is `["growth", "pro", "agency"]` (`lib/db/schema.ts:35`)
-  because Postgres cannot `DROP VALUE` from an enum — see [Legacy remnants](#legacy-polar-remnants).
+  (`lib/plans.ts:261-265`), and `drizzle/0020_drop_growth.sql` migrated the old rows.
+  The DB enum retains `["growth", "pro", "agency"]` because Postgres cannot `DROP VALUE` from an enum.
 </Note>
 
-### Pricing
+### Pricing & Plans
 
-Both plans are priced **per site** at a `$99/mo` base. Pro covers 1–2 sites; Agency covers
-3–20 sites with a volume discount. Annual = pay for 10 months ("2 months free").
+Spyro AI uses a unified org-level credit pool model (`credits:<orgId>` usage counter) shared across all workspaces.
 
-| | **Pro** | **Agency** |
-| --- | --- | --- |
-| Base price | `$99/mo` per site (`lib/plans.ts:154`) | `$99/mo` per site (`AGENCY_BASE_PER_SITE`, `lib/plans.ts:90`) |
-| Sites | 1–2 (`PRO_MAX_SITES = 2`) | 3–20 (`AGENCY_MIN_SITES = 3`, `AGENCY_MAX_SITES = 20`) |
-| 2-site total | `$198/mo` (no 2nd-site discount, `lib/plans.ts:127-130`) | — |
-| Volume discount | none | 3–5 sites: 10% · 6–10: 15% · 11–20: 20% (`lib/plans.ts:101-106`) |
-| White-label | `false` (`lib/plans.ts:174`) | `true` (`lib/plans.ts:206`) |
-| 21+ sites | — | "Contact us" Custom tier, no self-serve checkout |
+| | **Starter** | **Pro (Recommended)** | **Agency** |
+| :--- | :--- | :--- | :--- |
+| **Monthly price** | `$29 / mo` | `$99 / mo` | `$399 / mo` |
+| **Annual price** | `$288 / yr` ($24/mo) | `$990 / yr` ($82.50/mo) | `$3,990 / yr` ($332.50/mo) |
+| **Credit pool** | `4,000 credits / mo` | `15,000 credits / mo` | `80,000 credits / mo` |
+| **Workspaces** | `2` | `10` | `-1` (unlimited) |
+| **Monthly blogs** | `8` (cap) | `30` (cap) | `120` (cap) |
+| **Tracked keywords** | `100` | `500` | `1,500` |
+| **Tracked prompts** | `15` | `50` | `250` |
+| **AI engines** | ChatGPT, AI Overviews | All 5: ChatGPT, Claude, Gemini, Perplexity, AI Overviews | All 5 major engines |
+| **Crawl budget** | `150` pages | `1,000` pages | `1,500` pages |
+| **Integrations** | `2` | `5` | `5+` / unlimited |
 
-Agency pricing is computed, not stored — `agencyPrice(sites)` rounds `sites × $99 × (1 −
-discount)` (`lib/plans.ts:109-113`). Adding a 3rd site auto-converts a Pro org to Agency.
+### Credit System & Costs
 
-<Warning>
-  `.env.local.example:88-89` describes the 2-site Pro product as `$178/mo ($89×2)`. The code
-  is authoritative and uses **`$198/mo ($99×2)`** (`lib/plans.ts:123`, `lib/env.ts:99-100`).
-  The example file's numbers are out of date — quote `lib/plans.ts`, never the example.
-</Warning>
-
-### Per-plan limits
-
-Agency is deliberately "Pro × N sites" — every per-site capability is identical; Agency only
-differs on **workspace count** and **white-label** (`lib/plans.ts:188-190`). The shared
-limits (`lib/plans.ts:158-209`):
-
-| Limit | Pro | Agency |
-| --- | --- | --- |
-| `blogsPerMonth` (the core metered unit) | `30` | `30` per site |
-| `workspaces` | `2` | `purchasedWorkspaces` (default 3) |
-| `keywordsPerMonth` | `1000` | `1000` |
-| `serpLookupsPerMonth` | `500` | `500` |
-| `auditPages` | `500` | `500` |
-| `blogIdeasPerMonth` | `30` | `30` |
-| `inContentImagesPerPost` | `3` | `3` |
-| `trackedPrompts` | `10` | `10` |
-| `citationCallsPerMonth` | `600` | `600` |
-| `aiCreditsPerMonth` | `200` | `200` |
-| `trackedKeywordsMax` | `50` | `50` |
-| `integrationsMax` | `5` | `5` |
-| `engines` | AI Overview, Gemini, ChatGPT, Claude, Perplexity | same |
-
-<Info>
-  **There are no credit packs.** Despite older planning docs, `lib/plans.ts:11` states the
-  quota model is "**blogs per month** (no word credits, no credit packs)," and no
-  `CREDIT_PACKS` const or one-time-purchase flow exists anywhere in the code. The two metered
-  pools are `blogsPerMonth` (AI Writer allowance) and `aiCreditsPerMonth` (a shared
-  per-workspace pool consumed by **both** agent chat turns and keyword research). A vestigial
-  `credits_balance` column exists in the schema (`lib/db/schema.ts:90`, default 0) but no
-  billing code writes it.
-</Info>
+Actions draw from the organization's credit pool (`CREDIT_COSTS` in `lib/plans.ts`):
+- **Blog generation (`blog`)**: 250 credits per article (includes research, full draft, AI images, links, CMS publish)
+- **Spyro AI answer (`aiResponse`)**: 10 credits flat per turn (agent chat, Ask Spyro AI, writer assistant, rewrite)
+- **Keyword research (`keywordResearch`)**: 10 credits per query
+- **Keyword analysis (`keywordAnalysis`)**: 20 credits per view (metrics, suggestions, SERP)
+- **Citation check (`citationCheck`)**: 10 credits per prompt × engine (Claude: 20 credits)
+- **Rank check (`rankCheck`)**: 2 credits per tracked keyword (weekly)
+- **Competitor scan (`competitorScan`)**: 150 credits per domain (tech stack, history, pages, backlink gaps, AI verdict)
+- **LLM mentions scan (`mentionsScan`)**: 70 credits per tracked competitor (monthly discovery)
+- **Internal linking scan (`internalLinking`)**: 20 credits per verified page fix
+- **Additional workspace (`workspaceCreate`)**: 300 credits (first workspace is free)
+- **Site audits & crawls**: Free (0 credits)
+- **SERP lookups & snapshots**: Free (0 credits)
 
 ## The Dodo client
 
@@ -251,11 +227,11 @@ The trial constants (`lib/plans.ts:222-224`):
 ```ts
 // lib/plans.ts:222-224
 export const TRIAL_DAYS = 3;
-/** Trial allows 3 blogs total (not per-month). */
-export const TRIAL_BLOG_QUOTA = 3;
+/** Trial allows 1 blog total (not per-month). */
+export const TRIAL_BLOG_QUOTA = 1;
 ```
 
-`blogQuota()` resolves the period's blog allowance: in-trial → 3 total, expired → 0, else the
+`blogQuota()` resolves the period's blog allowance: in-trial → 1 total, expired → 0, else the
 plan's `blogsPerMonth` (`lib/plans.ts:246-250`). For display, `effectiveAccess(org)`
 (`lib/profile.ts:39-49`) derives `inTrial`, `trialDaysLeft`, and `expired` from
 `subscriptionActive` + `trialEndsAt` — but the hard gate is always `hasBillingAccess`.
